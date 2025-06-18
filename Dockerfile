@@ -10,4 +10,4 @@ COPY . /SpamDetection
 RUN pip install --no-cache-dir -r requirements.txt
 # Expose the port that Streamlit uses
 EXPOSE 8501
-CMD ["stream","run", "spam_detection.py"]
+CMD ["stream","run", "sms_spam_detection.py"]
