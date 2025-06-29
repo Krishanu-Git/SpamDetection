@@ -6,6 +6,7 @@ import nltk
 from nltk.corpus import stopwords
 from nltk.stem.porter import PorterStemmer
 from functools import lru_cache
+import streamlit as st
 
 # Load NLTK resources
 nltk.download('punkt')
@@ -40,8 +41,8 @@ def check_label_exists(label_name: str) -> bool:
     return False
 
 # Gmail credentials (replace with your credentials or use environment variables)
-EMAIL = 'g24ai2013@iitj.ac.in'
-PASSWORD = 'jhun lfjc viwt bwej'
+EMAIL = 'dhruvaagarwal90@gmail.com'
+PASSWORD = 'dwdr ozpj bofx grdw'
 
 # Connect to Gmail IMAP server
 mail = imaplib.IMAP4_SSL('imap.gmail.com')
@@ -53,25 +54,54 @@ result, data = mail.search(None, 'ALL')
 email_ids = data[0].split()
 last_50_emails = email_ids[-50:][::-1]
 
+# Streamlit UI
+st.title("Email Spam Detection Results")
+st.write("Below are the latest 50 emails and their spam predictions:")
+
 for eid in last_50_emails:
     result, msg_data = mail.fetch(eid, '(RFC822)')
-    raw_email = msg_data[0][1]
-    msg = email.message_from_bytes(raw_email)
+    # Ensure msg_data[0] is a tuple and the second element is bytes
+    if (
+        isinstance(msg_data, list)
+        and len(msg_data) > 0
+        and isinstance(msg_data[0], tuple)
+        and len(msg_data[0]) > 1
+        and isinstance(msg_data[0][1], (bytes, bytearray))
+    ):
+        raw_email = msg_data[0][1]
+        if isinstance(raw_email, bytes) or isinstance(raw_email, bytearray):
+            msg = email.message_from_bytes(raw_email)
+        else:
+            st.warning("Email data is not in bytes format, skipping this email.")
+            continue
+    else:
+        st.warning("Email data is not in the expected format, skipping this email.")
+        continue
 
     subject = msg['subject']
     body = ""
     if msg.is_multipart():
         for part in msg.walk():
             if part.get_content_type() == "text/plain":
-                body = part.get_payload(decode=True).decode()
+                payload = part.get_payload(decode=True)
+                if isinstance(payload, bytes):
+                    body = payload.decode(errors='replace')
+                elif isinstance(payload, str):
+                    body = payload
+                else:
+                    body = ""
                 break
     else:
-        body = msg.get_payload(decode=True).decode()
+        payload = msg.get_payload(decode=True)
+        if isinstance(payload, bytes):
+            body = payload.decode(errors='replace')
+        elif isinstance(payload, str):
+            body = payload
+        else:
+            body = ""
 
     # Combine subject and body for prediction
     email_text = f"{subject} {body}"
-    print(f"Email Subject: {subject}")
-    print(f"Email Body: {body}")
 
     # Preprocess and vectorize
     transformed = transform_text(email_text)
@@ -81,8 +111,24 @@ for eid in last_50_emails:
     prediction = model.predict(vectorized)[0]
     ham, spam = model.predict_proba(vectorized)[0]
     label = 'Spam' if prediction == 1 else 'Ham'
-    print(f"Prediction: {label}")
-    print(f"Spam Probability: {spam * 100:.2f}%, Ham Probability: {ham * 100:.2f}%")
+
+    # Show on UI
+    color = "red" if label == "Spam" else "green"
+    # Custom HTML/CSS for colored expander header
+    expander_html = f"""
+        <details style="border: 2px solid {color}; border-radius: 8px; margin-bottom: 10px;">
+            <summary style="font-weight: bold; color: {color}; font-size: 18px;">
+                Subject: {subject}
+            </summary>
+            <div style="padding: 10px;">
+                <p><b>Body:</b> {body}</p>
+                <p><b style='color:{color};'>Prediction:</b> <span style='color:{color};'>{label}</span></p>
+                <p><b style='color:red;'>Spam Probability:</b> <span style='color:red;'>{spam * 100:.2f}%</span></p>
+                <p><b style='color:green;'>Ham Probability:</b> <span style='color:green;'>{ham * 100:.2f}%</span></p>
+            </div>
+        </details>
+    """
+    st.markdown(expander_html, unsafe_allow_html=True)
 
     # Create a label for spam found by MultinomialNB and move spam emails to that label
     if prediction == 1:
@@ -94,32 +140,8 @@ for eid in last_50_emails:
         if not label_exists:
             try:
                 mail.create(label_name)
-                print(f"Label '{label_name}' created.")
             except mail.error as e:
-                print(f"Could not create label '{label_name}': {e}")
-        else:
-            print(f"Label '{label_name}' already exists.")
+                st.warning(f"Could not create label '{label_name}': {e}")
 
         # Copy the email to the new label
         mail.copy(eid, label_name)
-        print(f"Email ID {eid.decode()} moved to label '{label_name}'")
-    else:
-        print("Email is not spam, no action taken.")
-
-    print("\n\n")
-
-
-"""
-An example of a spam email that might be detected:
-
-Subject: Urgent: Your account has been suspended!
-
-Dear user,
-
-We noticed suspicious activity in your account. Please verify your details immediately to restore access.
-
-Click here to verify: http://fake-verify-site.com
-
-Sincerely,
-Security Team
-"""
