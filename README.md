@@ -13,13 +13,9 @@ An end-to-end project for email and sms spam detection system
 3. docker run -p 8586:8504 sms_spam_check
 4. open http://localhost:8586 to predict the sms
 
-
 # Evaluation Metrices Used:
 1. Accuracy
 2. Precision
 3. Recall
 4. F1 Score
 5. Confusion Matrix
-
-# How to run email spam classifier
-1. python3 email_spam_classifier
